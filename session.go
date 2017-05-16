@@ -15,6 +15,7 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
+    "plus"
 )
 
 type unpacker interface {
@@ -57,6 +58,7 @@ type session struct {
 	config       *Config
 
 	conn connection
+    plusConnState *PLUS.PLUSConnState
 
 	streamsMap *streamsMap
 
@@ -116,6 +118,7 @@ type session struct {
 
 var _ Session = &session{}
 
+
 // newSession makes a new session
 func newSession(
 	conn connection,
@@ -123,10 +126,12 @@ func newSession(
 	connectionID protocol.ConnectionID,
 	sCfg *handshake.ServerConfig,
 	config *Config,
+    plusConnState *PLUS.PLUSConnState,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
+        plusConnState: plusConnState,
 		perspective:  protocol.PerspectiveServer,
 		version:      v,
 		config:       config,
@@ -138,10 +143,23 @@ func newSession(
 	cryptoStream, _ := s.GetOrOpenStream(1)
 	_, _ = s.AcceptStream() // don't expose the crypto stream
 	var sourceAddr []byte
-	if udpAddr, ok := conn.RemoteAddr().(*net.UDPAddr); ok {
+    
+    var udpAddr *net.UDPAddr
+    var ok bool
+    var _remoteAddr net.Addr
+    
+    if !s.config.UsePLUS {
+        _remoteAddr = conn.RemoteAddr()
+    } else {
+        _remoteAddr = plusConnState.RemoteAddr()
+    }
+    
+    udpAddr, ok = _remoteAddr.(*net.UDPAddr)
+    
+	if ok {
 		sourceAddr = udpAddr.IP
 	} else {
-		sourceAddr = []byte(conn.RemoteAddr().String())
+		sourceAddr = []byte(_remoteAddr.String())
 	}
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
 	s.aeadChanged = aeadChanged
@@ -176,9 +194,11 @@ var newClientSession = func(
 	connectionID protocol.ConnectionID,
 	config *Config,
 	negotiatedVersions []protocol.VersionNumber,
+    plusConnState *PLUS.PLUSConnState,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	s := &session{
 		conn:         conn,
+        plusConnState: plusConnState,
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveClient,
 		version:      v,
@@ -291,7 +311,9 @@ runLoop:
 			}
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
-			putPacketBuffer(p.publicHeader.Raw)
+			if !s.config.UsePLUS {
+                putPacketBuffer(p.publicHeader.Raw)
+            }
 		case l, ok := <-aeadChanged:
 			if !ok { // the aeadChanged chan was closed. This means that the handshake is completed.
 				s.handshakeComplete = true
@@ -419,7 +441,11 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	}
 	if s.perspective == protocol.PerspectiveServer {
 		// update the remote address, even if unpacking failed for any other reason than a decryption error
-		s.conn.SetCurrentRemoteAddr(p.remoteAddr)
+		if !s.config.UsePLUS {
+            s.conn.SetCurrentRemoteAddr(p.remoteAddr)
+        } else {
+            s.plusConnState.SetRemoteAddr(p.remoteAddr)
+        }
 	}
 	if err != nil {
 		return err
@@ -713,6 +739,15 @@ func (s *session) sendPacket() error {
 	}
 }
 
+func (s *session) write(data []byte) error {
+    fmt.Println("[ses] out ", data)
+    if(!s.config.UsePLUS) {
+        return s.conn.Write(data)
+    } else {
+        return s.plusConnState.Write(data)
+    }
+}
+
 func (s *session) sendPackedPacket(packet *packedPacket) error {
 	err := s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber:    packet.number,
@@ -726,7 +761,7 @@ func (s *session) sendPackedPacket(packet *packedPacket) error {
 
 	s.logPacket(packet)
 
-	err = s.conn.Write(packet.raw)
+	err = s.write(packet.raw)
 	putPacketBuffer(packet.raw)
 	return err
 }
@@ -740,7 +775,7 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
 		return errors.New("Session BUG: expected packet not to be nil")
 	}
 	s.logPacket(packet)
-	return s.conn.Write(packet.raw)
+	return s.write(packet.raw)
 }
 
 func (s *session) logPacket(packet *packedPacket) {
@@ -827,7 +862,7 @@ func (s *session) garbageCollectStreams() {
 
 func (s *session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
 	utils.Infof("Sending public reset for connection %x, packet number %d", s.connectionID, rejectedPacketNumber)
-	return s.conn.Write(writePublicReset(s.connectionID, rejectedPacketNumber, 0))
+	return s.write(writePublicReset(s.connectionID, rejectedPacketNumber, 0))
 }
 
 // scheduleSending signals that we have data for sending
@@ -877,10 +912,18 @@ func (s *session) ackAlarmChanged(t time.Time) {
 }
 
 func (s *session) LocalAddr() net.Addr {
-	return s.conn.LocalAddr()
+    if !s.config.UsePLUS {
+        return s.conn.LocalAddr()
+    } else {
+        return s.plusConnState.LocalAddr()
+    }
 }
 
 // RemoteAddr returns the net.Addr of the client
 func (s *session) RemoteAddr() net.Addr {
-	return s.conn.RemoteAddr()
+    if !s.config.UsePLUS {
+        return s.conn.RemoteAddr()
+    } else {
+        return s.plusConnState.RemoteAddr()
+    }
 }

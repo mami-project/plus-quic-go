@@ -168,7 +168,7 @@ var _ = Describe("Session", func() {
 			protocol.Version35,
 			0,
 			scfg,
-			populateServerConfig(&Config{}),
+			populateServerConfig(&Config{}), nil,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		sess = pSess.(*session)
@@ -191,7 +191,7 @@ var _ = Describe("Session", func() {
 				protocol.VersionWhatever,
 				0,
 				scfg,
-				populateServerConfig(&Config{}),
+				populateServerConfig(&Config{}), nil,
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cryptoSetupSourceAddr).To(Equal([]byte{192, 168, 100, 200}))
@@ -206,7 +206,7 @@ var _ = Describe("Session", func() {
 				protocol.VersionWhatever,
 				0,
 				scfg,
-				populateServerConfig(&Config{}),
+				populateServerConfig(&Config{}), nil,
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cryptoSetupSourceAddr).To(Equal([]byte("192.168.100.200:1337")))

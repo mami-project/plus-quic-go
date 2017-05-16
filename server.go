@@ -12,6 +12,8 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
+    "plus"
+    "fmt"
 )
 
 // packetHandler handles packets
@@ -26,6 +28,7 @@ type server struct {
 	config *Config
 
 	conn net.PacketConn
+    plusConnManager *PLUS.PLUSConnManager
 
 	certChain crypto.CertChain
 	scfg      *handshake.ServerConfig
@@ -38,7 +41,7 @@ type server struct {
 	sessionQueue chan Session
 	errorChan    chan struct{}
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, config *Config) (packetHandler, <-chan handshakeEvent, error)
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, config *Config, plusConnState *PLUS.PLUSConnState) (packetHandler, <-chan handshakeEvent, error)
 }
 
 var _ Listener = &server{}
@@ -69,18 +72,36 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+    
+    var s *server
 
-	s := &server{
-		conn:                      conn,
-		config:                    populateServerConfig(config),
-		certChain:                 certChain,
-		scfg:                      scfg,
-		sessions:                  map[protocol.ConnectionID]packetHandler{},
-		newSession:                newSession,
-		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
-		sessionQueue:              make(chan Session, 5),
-		errorChan:                 make(chan struct{}),
-	}
+    if !config.UsePLUS {
+        s = &server{
+            conn:                      conn,
+            plusConnManager:           nil,
+            config:                    populateServerConfig(config),
+            certChain:                 certChain,
+            scfg:                      scfg,
+            sessions:                  map[protocol.ConnectionID]packetHandler{},
+            newSession:                newSession,
+            deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
+            sessionQueue:              make(chan Session, 5),
+            errorChan:                 make(chan struct{}),
+        }
+    } else {
+        s = &server{
+            conn:                      nil,
+            plusConnManager:           PLUS.NewPLUSConnManager(conn),
+            config:                    populateServerConfig(config),
+            certChain:                 certChain,
+            scfg:                      scfg,
+            sessions:                  map[protocol.ConnectionID]packetHandler{},
+            newSession:                newSession,
+            deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
+            sessionQueue:              make(chan Session, 5),
+            errorChan:                 make(chan struct{}),
+        }
+    }
 	go s.serve()
 	return s, nil
 }
@@ -94,11 +115,41 @@ func populateServerConfig(config *Config) *Config {
 	return &Config{
 		TLSConfig: config.TLSConfig,
 		Versions:  versions,
+        UsePLUS:  config.UsePLUS,
 	}
+}
+
+// serve with PLUS
+func (s *server) servePLUS() {
+    fmt.Println("servePLUS")
+    for {
+        plusConnState, plusPacket, remoteAddr, _, err := s.plusConnManager.ReadAndProcessPacket()
+        
+        if err != nil {
+            s.serverError = err
+            close(s.errorChan)
+            _ = s.Close()
+            return
+        }
+        
+        data := plusPacket.Payload()
+        
+        fmt.Println("[srv] in_ ", data)
+        
+        if err := s.handlePacketPLUS(s.conn, remoteAddr, data, plusConnState); err != nil {
+            fmt.Printf("error handling PLUS packet: %s\n", err.Error())
+            utils.Errorf("error handling PLUS packet: %s", err.Error())
+        }
+    }
 }
 
 // serve listens on an existing PacketConn
 func (s *server) serve() {
+    if(s.config.UsePLUS) {
+        s.servePLUS()
+        return
+    }
+
 	for {
 		data := getPacketBuffer()
 		data = data[:protocol.MaxReceivePacketSize]
@@ -116,7 +167,7 @@ func (s *server) serve() {
 			utils.Errorf("error handling packet: %s", err.Error())
 		}
 	}
-		}
+}
 
 // Accept returns newly openend sessions
 func (s *server) Accept() (Session, error) {
@@ -144,15 +195,52 @@ func (s *server) Close() error {
 	if s.conn == nil {
 		return nil
 	}
-	return s.conn.Close()
+    
+    if !s.config.UsePLUS {
+        return s.conn.Close()
+    } else {
+        return s.plusConnManager.Close()
+    }
 }
 
 // Addr returns the server's network address
 func (s *server) Addr() net.Addr {
-	return s.conn.LocalAddr()
+    if !s.config.UsePLUS {
+        return s.conn.LocalAddr()
+    } else {
+        return s.plusConnManager.LocalAddr()
+    }
+}
+
+func (s *server) writeTo(pconn net.PacketConn, data []byte, remoteAddr net.Addr) error {
+    if pconn == nil {
+        pconn = s.conn
+    }
+
+    if(!s.config.UsePLUS) {
+        _, err := pconn.WriteTo(data, remoteAddr)
+        return err
+    } else {
+        return nil
+    }
+}
+
+func (s *server) writeToPLUS(plusConnState *PLUS.PLUSConnState, data []byte) error {
+    fmt.Println("server.go: writeToPLUS")
+
+    if(s.config.UsePLUS) {
+        err := plusConnState.Write(data)
+        return err
+    } else {
+        return nil
+    }
 }
 
 func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet []byte) error {
+    return s.handlePacketPLUS(pconn, remoteAddr, packet, nil)
+}
+
+func (s *server) handlePacketPLUS(pconn net.PacketConn, remoteAddr net.Addr, packet []byte, plusConnState *PLUS.PLUSConnState) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
@@ -196,13 +284,21 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return errors.New("dropping small packet with unknown version")
 		}
 		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
-		_, err = pconn.WriteTo(composeVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
+        if !s.config.UsePLUS {
+            err = s.writeTo(pconn, composeVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
+        } else {
+            err = s.writeToPLUS(plusConnState, composeVersionNegotiation(hdr.ConnectionID, s.config.Versions))
+        }
 		return err
 	}
 
 	if !ok {
 		if !hdr.VersionFlag {
-			_, err = pconn.WriteTo(writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
+            if !s.config.UsePLUS {
+                err = s.writeTo(pconn, writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
+            } else {
+                err = s.writeToPLUS(plusConnState, composeVersionNegotiation(hdr.ConnectionID, s.config.Versions))
+            }
 			return err
 		}
 		version := hdr.VersionNumber
@@ -212,12 +308,14 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 
 		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, version, remoteAddr)
 		var handshakeChan <-chan handshakeEvent
+        
 		session, handshakeChan, err = s.newSession(
 			&conn{pconn: pconn, currentAddr: remoteAddr},
 			version,
 			hdr.ConnectionID,
 			s.scfg,
 			s.config,
+            plusConnState,
 		)
 		if err != nil {
 			return err

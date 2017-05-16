@@ -12,6 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
+    "plus"
 )
 
 type client struct {
@@ -19,6 +20,8 @@ type client struct {
 	listenErr error
 
 	conn     connection
+    plusConnManager *PLUS.PLUSConnManager
+ 
 	hostname string
 
 	errorChan     chan struct{}
@@ -79,21 +82,41 @@ func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, con
 	}
 
 	clientConfig := populateClientConfig(config)
-	c := &client{
-		conn:         &conn{pconn: pconn, currentAddr: remoteAddr},
-		connectionID: connID,
-		hostname:     hostname,
-		config:       clientConfig,
-		version:      clientConfig.Versions[0],
-		errorChan:    make(chan struct{}),
-	}
+    
+    var c *client
+    
+    var plusConnState *PLUS.PLUSConnState
+    
+    if !config.UsePLUS {
+        c = &client{
+            conn:         &conn{pconn: pconn, currentAddr: remoteAddr},
+            connectionID: connID,
+            hostname:     hostname,
+            config:       clientConfig,
+            version:      clientConfig.Versions[0],
+            errorChan:    make(chan struct{}),
+        }
+    } else {
+        plusConnState = PLUS.NewPLUSConnState(uint64(connID), pconn, remoteAddr)
+    
+        c = &client{
+            conn:         nil,
+            connectionID: connID,
+            hostname:     hostname,
+            config:       clientConfig,
+            version:      clientConfig.Versions[0],
+            errorChan:    make(chan struct{}),
+            plusConnManager: PLUS.NewPLUSConnManagerClient(pconn, plusConnState),
+        }
+    }
 
-	err = c.createNewSession(nil)
+	err = c.createNewSession(nil, plusConnState)
 	if err != nil {
 		return nil, err
 	}
 
-	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", hostname, c.conn.RemoteAddr().String(), c.connectionID, c.version)
+    
+	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", hostname, remoteAddr.String(), c.connectionID, c.version)
 
 	return c.session.(NonFWSession), c.establishSecureConnection()
 }
@@ -122,6 +145,7 @@ func populateClientConfig(config *Config) *Config {
 		TLSConfig:                     config.TLSConfig,
 		Versions:                      versions,
 		RequestConnectionIDTruncation: config.RequestConnectionIDTruncation,
+        UsePLUS:                       config.UsePLUS,
 	}
 }
 
@@ -143,8 +167,40 @@ func (c *client) establishSecureConnection() error {
 	}
 }
 
+func (c *client) listenPLUS() {
+    fmt.Println("listenPLUS")
+
+	for {
+		plusConnState, plusPacket, remoteAddr, _, err := c.plusConnManager.ReadAndProcessPacket()
+        
+        
+        
+		if err != nil {
+			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
+				c.session.Close(err)
+			}
+			break
+		}
+		data := plusPacket.Payload()
+        
+        fmt.Println("client.go: got packet")
+
+		err = c.handlePacketPLUS(remoteAddr, data, plusConnState)
+		if err != nil {
+			utils.Errorf("error handling PLUS packet: %s", err.Error())
+			c.session.Close(err)
+			break
+		}
+	}
+}
+
 // Listen listens
 func (c *client) listen() {
+    if c.config.UsePLUS {
+        c.listenPLUS()
+        return
+    }
+
 	var err error
 
 	for {
@@ -173,6 +229,10 @@ func (c *client) listen() {
 }
 
 func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
+    return c.handlePacketPLUS(remoteAddr, packet, nil)
+}
+
+func (c *client) handlePacketPLUS(remoteAddr net.Addr, packet []byte, plusConnState *PLUS.PLUSConnState) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
@@ -198,7 +258,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 
 	if hdr.VersionFlag {
 		// version negotiation packets have no payload
-		return c.handlePacketWithVersionFlag(hdr)
+		return c.handlePacketWithVersionFlag(hdr, plusConnState)
 	}
 
 	c.session.handlePacket(&receivedPacket{
@@ -210,7 +270,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	return nil
 }
 
-func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
+func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader, plusConnState *PLUS.PLUSConnState) error {
 	for _, v := range hdr.SupportedVersions {
 		if v == c.version {
 			// the version negotiation packet contains the version that we offered
@@ -236,10 +296,10 @@ func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
 	utils.Infof("Switching to QUIC version %d. New connection ID: %x", newVersion, c.connectionID)
 
 	c.session.Close(errCloseSessionForNewVersion)
-	return c.createNewSession(hdr.SupportedVersions)
+	return c.createNewSession(hdr.SupportedVersions, plusConnState)
 }
 
-func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
+func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber, plusConnState *PLUS.PLUSConnState) error {
 	var err error
 	c.session, c.handshakeChan, err = newClientSession(
 		c.conn,
@@ -248,6 +308,7 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 		c.connectionID,
 		c.config,
 		negotiatedVersions,
+        plusConnState,
 	)
 	if err != nil {
 		return err
@@ -263,7 +324,12 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 		close(c.errorChan)
 
 		utils.Infof("Connection %x closed.", c.connectionID)
-		c.conn.Close()
+        
+        if !c.config.UsePLUS {
+            c.conn.Close()
+        } else {
+            c.plusConnManager.Close()
+        }
 	}()
 	return nil
 }

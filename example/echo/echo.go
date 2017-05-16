@@ -12,6 +12,7 @@ import (
 	"math/big"
 
 	quic "github.com/lucas-clemente/quic-go"
+    "github.com/lucas-clemente/quic-go/utils"
 )
 
 const addr = "localhost:4242"
@@ -21,6 +22,8 @@ const message = "foobar"
 // We start a server echoing data on the first stream the client opens,
 // then connect with a client, send the message, and wait for its receipt.
 func main() {
+    utils.SetLogLevel(utils.LogLevelDebug)
+
 	go func() { log.Fatal(echoServer()) }()
 
 	err := clientMain()
@@ -33,6 +36,7 @@ func main() {
 func echoServer() error {
 	cfgServer := &quic.Config{
 		TLSConfig: generateTLSConfig(),
+        UsePLUS: true,
 	}
 	listener, err := quic.ListenAddr(addr, cfgServer)
 	if err != nil {
@@ -54,11 +58,14 @@ func echoServer() error {
 func clientMain() error {
 	cfgClient := &quic.Config{
 		TLSConfig: &tls.Config{InsecureSkipVerify: true},
+        UsePLUS: true,
 	}
 	session, err := quic.DialAddr(addr, cfgClient)
 	if err != nil {
 		return err
 	}
+    
+    fmt.Println("Opening stream")
 
 	stream, err := session.OpenStreamSync()
 	if err != nil {

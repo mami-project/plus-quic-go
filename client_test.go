@@ -26,7 +26,7 @@ var _ = Describe("Client", func() {
 	BeforeEach(func() {
 		originalClientSessConstructor = newClientSession
 		Eventually(areSessionsRunning).Should(BeFalse())
-		msess, _, _ := newMockSession(nil, 0, 0, nil, nil)
+		msess, _, _ := newMockSession(nil, 0, 0, nil, nil, nil)
 		sess = msess.(*mockSession)
 		packetConn = &mockPacketConn{}
 		config = &Config{
