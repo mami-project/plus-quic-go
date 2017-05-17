@@ -123,7 +123,7 @@ func populateServerConfig(config *Config) *Config {
 func (s *server) servePLUS() {
     fmt.Println("servePLUS")
     for {
-        plusConnection, plusPacket, remoteAddr, _, err := s.plusConnManager.ReadAndProcessPacket()
+        plusConnection, plusPacket, remoteAddr, feedbackData, err := s.plusConnManager.ReadAndProcessPacket()
         
         if err != nil {
             s.serverError = err
@@ -131,6 +131,10 @@ func (s *server) servePLUS() {
             _ = s.Close()
             return
         }
+
+		if feedbackData != nil {
+			_ = plusConnection.SendFeedback(feedbackData)
+		}
         
         data := plusPacket.Payload()
         

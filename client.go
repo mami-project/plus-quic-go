@@ -97,8 +97,9 @@ func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, con
             errorChan:    make(chan struct{}),
         }
     } else {
-        connection = PLUS.NewConnection(uint64(connID), pconn, remoteAddr)
-    
+        var plusConnManager *PLUS.ConnectionManager
+		plusConnManager, connection = PLUS.NewConnectionManagerClient(pconn, uint64(connID), remoteAddr)    
+
         c = &client{
             conn:         nil,
             connectionID: connID,
@@ -106,7 +107,7 @@ func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, con
             config:       clientConfig,
             version:      clientConfig.Versions[0],
             errorChan:    make(chan struct{}),
-            plusConnManager: PLUS.NewConnectionManagerClient(pconn, connection),
+            plusConnManager: plusConnManager,
         }
     }
 
