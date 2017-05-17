@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"math/big"
 
 	quic "github.com/lucas-clemente/quic-go"
     "github.com/lucas-clemente/quic-go/utils"
+	"plus"
 )
 
 const addr = "localhost:4242"
@@ -23,6 +25,7 @@ const message = "foobar"
 // then connect with a client, send the message, and wait for its receipt.
 func main() {
     utils.SetLogLevel(utils.LogLevelDebug)
+	PLUS.LoggerDestination = os.Stdout
 
 	go func() { log.Fatal(echoServer()) }()
 
