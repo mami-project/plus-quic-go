@@ -28,7 +28,7 @@ type server struct {
 	config *Config
 
 	conn net.PacketConn
-    plusConnManager *PLUS.PLUSConnManager
+    plusConnManager *PLUS.ConnectionManager
 
 	certChain crypto.CertChain
 	scfg      *handshake.ServerConfig
@@ -41,7 +41,7 @@ type server struct {
 	sessionQueue chan Session
 	errorChan    chan struct{}
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, config *Config, plusConnState *PLUS.PLUSConnState) (packetHandler, <-chan handshakeEvent, error)
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, config *Config, plusConnection *PLUS.Connection) (packetHandler, <-chan handshakeEvent, error)
 }
 
 var _ Listener = &server{}
@@ -91,7 +91,7 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
     } else {
         s = &server{
             conn:                      nil,
-            plusConnManager:           PLUS.NewPLUSConnManager(conn),
+            plusConnManager:           PLUS.NewConnectionManager(conn),
             config:                    populateServerConfig(config),
             certChain:                 certChain,
             scfg:                      scfg,
@@ -123,7 +123,7 @@ func populateServerConfig(config *Config) *Config {
 func (s *server) servePLUS() {
     fmt.Println("servePLUS")
     for {
-        plusConnState, plusPacket, remoteAddr, _, err := s.plusConnManager.ReadAndProcessPacket()
+        plusConnection, plusPacket, remoteAddr, _, err := s.plusConnManager.ReadAndProcessPacket()
         
         if err != nil {
             s.serverError = err
@@ -136,7 +136,7 @@ func (s *server) servePLUS() {
         
         fmt.Println("[srv] in_ ", data)
         
-        if err := s.handlePacketPLUS(s.conn, remoteAddr, data, plusConnState); err != nil {
+        if err := s.handlePacketPLUS(s.conn, remoteAddr, data, plusConnection); err != nil {
             fmt.Printf("error handling PLUS packet: %s\n", err.Error())
             utils.Errorf("error handling PLUS packet: %s", err.Error())
         }
@@ -225,11 +225,11 @@ func (s *server) writeTo(pconn net.PacketConn, data []byte, remoteAddr net.Addr)
     }
 }
 
-func (s *server) writeToPLUS(plusConnState *PLUS.PLUSConnState, data []byte) error {
+func (s *server) writeToPLUS(plusConnection *PLUS.Connection, data []byte) error {
     fmt.Println("server.go: writeToPLUS")
 
     if(s.config.UsePLUS) {
-        err := plusConnState.Write(data)
+        err := plusConnection.Write(data)
         return err
     } else {
         return nil
@@ -240,7 +240,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
     return s.handlePacketPLUS(pconn, remoteAddr, packet, nil)
 }
 
-func (s *server) handlePacketPLUS(pconn net.PacketConn, remoteAddr net.Addr, packet []byte, plusConnState *PLUS.PLUSConnState) error {
+func (s *server) handlePacketPLUS(pconn net.PacketConn, remoteAddr net.Addr, packet []byte, plusConnection *PLUS.Connection) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
@@ -287,7 +287,7 @@ func (s *server) handlePacketPLUS(pconn net.PacketConn, remoteAddr net.Addr, pac
         if !s.config.UsePLUS {
             err = s.writeTo(pconn, composeVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
         } else {
-            err = s.writeToPLUS(plusConnState, composeVersionNegotiation(hdr.ConnectionID, s.config.Versions))
+            err = s.writeToPLUS(plusConnection, composeVersionNegotiation(hdr.ConnectionID, s.config.Versions))
         }
 		return err
 	}
@@ -297,7 +297,7 @@ func (s *server) handlePacketPLUS(pconn net.PacketConn, remoteAddr net.Addr, pac
             if !s.config.UsePLUS {
                 err = s.writeTo(pconn, writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
             } else {
-                err = s.writeToPLUS(plusConnState, composeVersionNegotiation(hdr.ConnectionID, s.config.Versions))
+                err = s.writeToPLUS(plusConnection, composeVersionNegotiation(hdr.ConnectionID, s.config.Versions))
             }
 			return err
 		}
@@ -315,7 +315,7 @@ func (s *server) handlePacketPLUS(pconn net.PacketConn, remoteAddr net.Addr, pac
 			hdr.ConnectionID,
 			s.scfg,
 			s.config,
-            plusConnState,
+            plusConnection,
 		)
 		if err != nil {
 			return err

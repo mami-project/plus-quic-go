@@ -58,7 +58,7 @@ type session struct {
 	config       *Config
 
 	conn connection
-    plusConnState *PLUS.PLUSConnState
+    plusConnection *PLUS.Connection
 
 	streamsMap *streamsMap
 
@@ -126,12 +126,12 @@ func newSession(
 	connectionID protocol.ConnectionID,
 	sCfg *handshake.ServerConfig,
 	config *Config,
-    plusConnState *PLUS.PLUSConnState,
+    plusConnection *PLUS.Connection,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
-        plusConnState: plusConnState,
+        plusConnection: plusConnection,
 		perspective:  protocol.PerspectiveServer,
 		version:      v,
 		config:       config,
@@ -151,7 +151,7 @@ func newSession(
     if !s.config.UsePLUS {
         _remoteAddr = conn.RemoteAddr()
     } else {
-        _remoteAddr = plusConnState.RemoteAddr()
+        _remoteAddr = plusConnection.RemoteAddr()
     }
     
     udpAddr, ok = _remoteAddr.(*net.UDPAddr)
@@ -194,11 +194,11 @@ var newClientSession = func(
 	connectionID protocol.ConnectionID,
 	config *Config,
 	negotiatedVersions []protocol.VersionNumber,
-    plusConnState *PLUS.PLUSConnState,
+    plusConnection *PLUS.Connection,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	s := &session{
 		conn:         conn,
-        plusConnState: plusConnState,
+        plusConnection: plusConnection,
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveClient,
 		version:      v,
@@ -444,7 +444,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		if !s.config.UsePLUS {
             s.conn.SetCurrentRemoteAddr(p.remoteAddr)
         } else {
-            s.plusConnState.SetRemoteAddr(p.remoteAddr)
+            s.plusConnection.SetRemoteAddr(p.remoteAddr)
         }
 	}
 	if err != nil {
@@ -744,7 +744,7 @@ func (s *session) write(data []byte) error {
     if(!s.config.UsePLUS) {
         return s.conn.Write(data)
     } else {
-        return s.plusConnState.Write(data)
+        return s.plusConnection.Write(data)
     }
 }
 
@@ -915,7 +915,7 @@ func (s *session) LocalAddr() net.Addr {
     if !s.config.UsePLUS {
         return s.conn.LocalAddr()
     } else {
-        return s.plusConnState.LocalAddr()
+        return s.plusConnection.LocalAddr()
     }
 }
 
@@ -924,6 +924,6 @@ func (s *session) RemoteAddr() net.Addr {
     if !s.config.UsePLUS {
         return s.conn.RemoteAddr()
     } else {
-        return s.plusConnState.RemoteAddr()
+        return s.plusConnection.RemoteAddr()
     }
 }

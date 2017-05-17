@@ -20,7 +20,7 @@ type client struct {
 	listenErr error
 
 	conn     connection
-    plusConnManager *PLUS.PLUSConnManager
+    plusConnManager *PLUS.ConnectionManager
  
 	hostname string
 
@@ -85,7 +85,7 @@ func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, con
     
     var c *client
     
-    var plusConnState *PLUS.PLUSConnState
+    var connection *PLUS.Connection
     
     if !config.UsePLUS {
         c = &client{
@@ -97,7 +97,7 @@ func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, con
             errorChan:    make(chan struct{}),
         }
     } else {
-        plusConnState = PLUS.NewPLUSConnState(uint64(connID), pconn, remoteAddr)
+        connection = PLUS.NewConnection(uint64(connID), pconn, remoteAddr)
     
         c = &client{
             conn:         nil,
@@ -106,11 +106,11 @@ func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, con
             config:       clientConfig,
             version:      clientConfig.Versions[0],
             errorChan:    make(chan struct{}),
-            plusConnManager: PLUS.NewPLUSConnManagerClient(pconn, plusConnState),
+            plusConnManager: PLUS.NewConnectionManagerClient(pconn, connection),
         }
     }
 
-	err = c.createNewSession(nil, plusConnState)
+	err = c.createNewSession(nil, connection)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (c *client) listenPLUS() {
     fmt.Println("listenPLUS")
 
 	for {
-		plusConnState, plusPacket, remoteAddr, _, err := c.plusConnManager.ReadAndProcessPacket()
+		connection, plusPacket, remoteAddr, _, err := c.plusConnManager.ReadAndProcessPacket()
         
         
         
@@ -185,7 +185,7 @@ func (c *client) listenPLUS() {
         
         fmt.Println("client.go: got packet")
 
-		err = c.handlePacketPLUS(remoteAddr, data, plusConnState)
+		err = c.handlePacketPLUS(remoteAddr, data, connection)
 		if err != nil {
 			utils.Errorf("error handling PLUS packet: %s", err.Error())
 			c.session.Close(err)
@@ -232,7 +232,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
     return c.handlePacketPLUS(remoteAddr, packet, nil)
 }
 
-func (c *client) handlePacketPLUS(remoteAddr net.Addr, packet []byte, plusConnState *PLUS.PLUSConnState) error {
+func (c *client) handlePacketPLUS(remoteAddr net.Addr, packet []byte, connection *PLUS.Connection) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
@@ -258,7 +258,7 @@ func (c *client) handlePacketPLUS(remoteAddr net.Addr, packet []byte, plusConnSt
 
 	if hdr.VersionFlag {
 		// version negotiation packets have no payload
-		return c.handlePacketWithVersionFlag(hdr, plusConnState)
+		return c.handlePacketWithVersionFlag(hdr, connection)
 	}
 
 	c.session.handlePacket(&receivedPacket{
@@ -270,7 +270,7 @@ func (c *client) handlePacketPLUS(remoteAddr net.Addr, packet []byte, plusConnSt
 	return nil
 }
 
-func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader, plusConnState *PLUS.PLUSConnState) error {
+func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader, connection *PLUS.Connection) error {
 	for _, v := range hdr.SupportedVersions {
 		if v == c.version {
 			// the version negotiation packet contains the version that we offered
@@ -296,10 +296,10 @@ func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader, plusConnState *P
 	utils.Infof("Switching to QUIC version %d. New connection ID: %x", newVersion, c.connectionID)
 
 	c.session.Close(errCloseSessionForNewVersion)
-	return c.createNewSession(hdr.SupportedVersions, plusConnState)
+	return c.createNewSession(hdr.SupportedVersions, connection)
 }
 
-func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber, plusConnState *PLUS.PLUSConnState) error {
+func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber, connection *PLUS.Connection) error {
 	var err error
 	c.session, c.handshakeChan, err = newClientSession(
 		c.conn,
@@ -308,7 +308,7 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber, p
 		c.connectionID,
 		c.config,
 		negotiatedVersions,
-        plusConnState,
+        connection,
 	)
 	if err != nil {
 		return err
