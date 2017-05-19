@@ -4,7 +4,6 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 
 	"errors"
 )
@@ -18,8 +17,12 @@ var (
 
 // A BlockedFrame in QUIC
 type PLUSFeedbackFrame struct {
-	StreamID protocol.StreamID
-	data []byte
+	Data []byte
+}
+
+// MinLength of a written frame
+func (f *PLUSFeedbackFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+	return 1 + 1, nil //1 byte frame type, id + 1 lenByte
 }
 
 // ParsePLUSFeedbackFrame reads a pcf frame
@@ -35,14 +38,6 @@ func ParsePLUSFeedbackFrame(r *bytes.Reader) (*PLUSFeedbackFrame, error) {
 	if typeByte != plusFeedbackFrameType {
 		return nil, errInvalidFrameType
 	}
-
-	// read stream id
-	sid, err := utils.ReadUint32(r)
-	if err != nil {
-		return nil, err
-	}
-
-	frame.StreamID = protocol.StreamID(sid)
 
 	// read the len byte
 	lenByte, err := r.ReadByte()
@@ -61,7 +56,7 @@ func ParsePLUSFeedbackFrame(r *bytes.Reader) (*PLUSFeedbackFrame, error) {
 		return nil, errUnexpectedEndOfData
 	}
 
-	frame.data = data
+	frame.Data = data
 
 	return frame, nil
 }
@@ -75,27 +70,24 @@ func (f *PLUSFeedbackFrame) Write(b *bytes.Buffer, version protocol.VersionNumbe
 		return err
 	}
 
-	// Write streamID
-	utils.WriteUint32(b, uint32(f.StreamID))
-
 	// Write len byte
-	if len(f.data) >= 64 {
+	if len(f.Data) >= 64 {
 		return errInvalidLenByte
 	}
 
-	err = b.WriteByte(byte(len(f.data)))
+	err = b.WriteByte(byte(len(f.Data)))
 
 	if err != nil {
 		return err
 	}
 
-	n, err := b.Write(f.data)
+	n, err := b.Write(f.Data)
 
 	if err != nil {
 		return err
 	}
 
-	if n != len(f.data) {
+	if n != len(f.Data) {
 		return errors.New("PLUSFeedbackFrame: Write did not write enough bytes!")
 	}
 

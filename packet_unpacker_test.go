@@ -202,10 +202,19 @@ var _ = Describe("Packet unpacker", func() {
 		}))
 	})
 
+	It("accepts PLUSFEEDBACK frames", func() {
+		setData([]byte{0x08,0x02, 0xFF, 0xFF})
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.frames).To(Equal([]frames.Frame{
+			&frames.PLUSFeedbackFrame{Data : []byte{0xFF, 0xFF}},
+		}))
+	})
+
 	It("errors on invalid type", func() {
-		setData([]byte{0x08})
+		setData([]byte{0x09})
 		_, err := unpacker.Unpack(hdrBin, hdr, data)
-		Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0x8"))
+		Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0x9"))
 	})
 
 	It("errors on invalid frames", func() {
