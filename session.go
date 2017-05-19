@@ -503,6 +503,7 @@ func (s *session) handleFrames(fs []frames.Frame) error {
 		case *frames.BlockedFrame:
 		case *frames.PingFrame:
 		case *frames.PLUSFeedbackFrame:
+			utils.Infof("Received a PLUSFeedbackFrame with feedback: %x", frame.Data)
 			if s.config.UsePLUS {
 				s.plusConnection.AddPCFFeedback(frame.Data)
 			}

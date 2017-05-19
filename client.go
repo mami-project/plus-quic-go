@@ -184,7 +184,6 @@ func (c *client) listenPLUS() {
 		}
 		data := plusPacket.Payload()
         
-        fmt.Println("client.go: got packet")
 
 		err = c.handlePacketPLUS(remoteAddr, data, connection)
 		if err != nil {

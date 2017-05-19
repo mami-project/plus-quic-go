@@ -136,7 +136,9 @@ func (s *server) servePLUS() {
         
         data := plusPacket.Payload()
         
-        fmt.Println("[srv] in_ ", data)
+        if feedbackData != nil {
+			utils.Infof("Have to send feedback data %x", feedbackData)
+		}
         
         if err := s.handlePacketPLUS(s.conn, remoteAddr, data, plusConnection, feedbackData); err != nil {
             fmt.Printf("error handling PLUS packet: %s\n", err.Error())

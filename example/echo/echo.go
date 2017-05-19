@@ -13,7 +13,7 @@ import (
 	"math/big"
 
 	quic "github.com/lucas-clemente/quic-go"
-    "github.com/lucas-clemente/quic-go/utils"
+    //"github.com/lucas-clemente/quic-go/utils"
 	"plus"
 )
 
@@ -24,7 +24,7 @@ const message = "foobar"
 // We start a server echoing data on the first stream the client opens,
 // then connect with a client, send the message, and wait for its receipt.
 func main() {
-    utils.SetLogLevel(utils.LogLevelDebug)
+    //utils.SetLogLevel(utils.LogLevelDebug)
 	PLUS.LoggerDestination = os.Stdout
 
 	go func() { log.Fatal(echoServer()) }()
