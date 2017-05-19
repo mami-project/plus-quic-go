@@ -27,6 +27,7 @@ type receivedPacket struct {
 	publicHeader *PublicHeader
 	data         []byte
 	rcvTime      time.Time
+	feedbackData []byte //in case of PLUS, otherwise it's nil
 }
 
 var (
@@ -471,6 +472,12 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		return err
 	}
 
+	if p.feedbackData != nil {
+		if(s.config.UsePLUS) {
+			s.queuePLUSFeedbackFrame(p.feedbackData)
+		}
+	}
+
 	return s.handleFrames(packet.frames)
 }
 
@@ -495,6 +502,10 @@ func (s *session) handleFrames(fs []frames.Frame) error {
 			err = s.handleWindowUpdateFrame(frame)
 		case *frames.BlockedFrame:
 		case *frames.PingFrame:
+		case *frames.PLUSFeedbackFrame:
+			if s.config.UsePLUS {
+				s.plusConnection.AddPCFFeedback(frame.Data)
+			}
 		default:
 			return errors.New("Session BUG: unexpected frame type")
 		}
@@ -817,6 +828,13 @@ func (s *session) OpenStreamSync() (Stream, error) {
 
 func (s *session) WaitUntilHandshakeComplete() error {
 	return <-s.handshakeCompleteChan
+}
+
+func (s *session) queuePLUSFeedbackFrame(data []byte) {
+	s.packer.QueueControlFrameForNextPacket(&frames.PLUSFeedbackFrame{
+		Data: data,
+	})
+	s.scheduleSending()
 }
 
 func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.ByteCount) {

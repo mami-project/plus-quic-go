@@ -132,15 +132,13 @@ func (s *server) servePLUS() {
             return
         }
 
-		if feedbackData != nil {
-			_ = plusConnection.SendFeedback(feedbackData)
-		}
+	
         
         data := plusPacket.Payload()
         
         fmt.Println("[srv] in_ ", data)
         
-        if err := s.handlePacketPLUS(s.conn, remoteAddr, data, plusConnection); err != nil {
+        if err := s.handlePacketPLUS(s.conn, remoteAddr, data, plusConnection, feedbackData); err != nil {
             fmt.Printf("error handling PLUS packet: %s\n", err.Error())
             utils.Errorf("error handling PLUS packet: %s", err.Error())
         }
@@ -241,10 +239,10 @@ func (s *server) writeToPLUS(plusConnection *PLUS.Connection, data []byte) error
 }
 
 func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet []byte) error {
-    return s.handlePacketPLUS(pconn, remoteAddr, packet, nil)
+    return s.handlePacketPLUS(pconn, remoteAddr, packet, nil, nil)
 }
 
-func (s *server) handlePacketPLUS(pconn net.PacketConn, remoteAddr net.Addr, packet []byte, plusConnection *PLUS.Connection) error {
+func (s *server) handlePacketPLUS(pconn net.PacketConn, remoteAddr net.Addr, packet []byte, plusConnection *PLUS.Connection, feedbackData []byte) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
@@ -356,6 +354,7 @@ func (s *server) handlePacketPLUS(pconn net.PacketConn, remoteAddr net.Addr, pac
 		publicHeader: hdr,
 		data:         packet[len(packet)-r.Len():],
 		rcvTime:      rcvTime,
+		feedbackData: feedbackData,
 	})
 	return nil
 }
