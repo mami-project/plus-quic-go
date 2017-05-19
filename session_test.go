@@ -1558,6 +1558,7 @@ var _ = Describe("Client Session", func() {
 			0,
 			populateClientConfig(&Config{}),
 			nil,
+			nil,
 		)
 		sess = sessP.(*session)
 		Expect(err).ToNot(HaveOccurred())

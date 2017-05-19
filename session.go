@@ -740,7 +740,6 @@ func (s *session) sendPacket() error {
 }
 
 func (s *session) write(data []byte) error {
-    fmt.Println("[ses] out ", data)
     if(!s.config.UsePLUS) {
         return s.conn.Write(data)
     } else {

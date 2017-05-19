@@ -10,6 +10,8 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"plus"
 )
 
 var _ = Describe("Client", func() {
@@ -20,7 +22,7 @@ var _ = Describe("Client", func() {
 		packetConn *mockPacketConn
 		addr       net.Addr
 
-		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, config *Config, negotiatedVersions []protocol.VersionNumber) (packetHandler, <-chan handshakeEvent, error)
+		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, config *Config, negotiatedVersions []protocol.VersionNumber, plusConnection *PLUS.Connection) (packetHandler, <-chan handshakeEvent, error)
 	)
 
 	BeforeEach(func() {
@@ -63,6 +65,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ []protocol.VersionNumber,
+				_ *PLUS.Connection,
 			) (packetHandler, <-chan handshakeEvent, error) {
 				return sess, sess.handshakeChan, nil
 			}
@@ -120,6 +123,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ []protocol.VersionNumber,
+				_ *PLUS.Connection,
 			) (packetHandler, <-chan handshakeEvent, error) {
 				cconn = conn
 				return sess, nil, nil
@@ -182,6 +186,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ []protocol.VersionNumber,
+				_ *PLUS.Connection,
 			) (packetHandler, <-chan handshakeEvent, error) {
 				return nil, nil, testErr
 			}
@@ -213,6 +218,7 @@ var _ = Describe("Client", func() {
 					connectionID protocol.ConnectionID,
 					_ *Config,
 					negotiatedVersionsP []protocol.VersionNumber,
+					_ *PLUS.Connection,
 				) (packetHandler, <-chan handshakeEvent, error) {
 					negotiatedVersions = negotiatedVersionsP
 					return &mockSession{
@@ -294,6 +300,7 @@ var _ = Describe("Client", func() {
 			_ protocol.ConnectionID,
 			configP *Config,
 			_ []protocol.VersionNumber,
+			_ *PLUS.Connection,
 		) (packetHandler, <-chan handshakeEvent, error) {
 			cconn = connP
 			hostname = hostnameP

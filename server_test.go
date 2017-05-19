@@ -73,7 +73,7 @@ func newMockSession(
 	_ protocol.VersionNumber,
 	connectionID protocol.ConnectionID,
 	_ *handshake.ServerConfig,
-	_ *Config, _ *PLUS.PLUSConnState,
+	_ *Config, _ *PLUS.Connection,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	s := mockSession{
 		connectionID:      connectionID,
