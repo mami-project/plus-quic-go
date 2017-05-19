@@ -15,7 +15,7 @@ var (
 	plusFeedbackFrameType byte = 0x08
 )
 
-// A BlockedFrame in QUIC
+// A PLUSFeedbackFrame in QUIC
 type PLUSFeedbackFrame struct {
 	Data []byte
 }
