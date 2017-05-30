@@ -144,19 +144,19 @@ func newSession(
 	cryptoStream, _ := s.GetOrOpenStream(1)
 	_, _ = s.AcceptStream() // don't expose the crypto stream
 	var sourceAddr []byte
-    
+
     var udpAddr *net.UDPAddr
     var ok bool
     var _remoteAddr net.Addr
-    
+
     if !s.config.UsePLUS {
         _remoteAddr = conn.RemoteAddr()
     } else {
         _remoteAddr = plusConnection.RemoteAddr()
     }
-    
+
     udpAddr, ok = _remoteAddr.(*net.UDPAddr)
-    
+
 	if ok {
 		sourceAddr = udpAddr.IP
 	} else {
@@ -755,7 +755,8 @@ func (s *session) write(data []byte) error {
     if(!s.config.UsePLUS) {
         return s.conn.Write(data)
     } else {
-        return s.plusConnection.Write(data)
+			  _, err := s.plusConnection.Write(data)
+        return err
     }
 }
 

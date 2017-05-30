@@ -72,7 +72,7 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-    
+
     var s *server
 
     if !config.UsePLUS {
@@ -124,7 +124,7 @@ func (s *server) servePLUS() {
     fmt.Println("servePLUS")
     for {
         plusConnection, plusPacket, remoteAddr, feedbackData, err := s.plusConnManager.ReadAndProcessPacket()
-        
+
         if err != nil {
             s.serverError = err
             close(s.errorChan)
@@ -132,14 +132,14 @@ func (s *server) servePLUS() {
             return
         }
 
-	
-        
+
+
         data := plusPacket.Payload()
-        
+
         if feedbackData != nil {
 			utils.Infof("Have to send feedback data %x", feedbackData)
 		}
-        
+
         if err := s.handlePacketPLUS(s.conn, remoteAddr, data, plusConnection, feedbackData); err != nil {
             fmt.Printf("error handling PLUS packet: %s\n", err.Error())
             utils.Errorf("error handling PLUS packet: %s", err.Error())
@@ -199,7 +199,7 @@ func (s *server) Close() error {
 	if s.conn == nil {
 		return nil
 	}
-    
+
     if !s.config.UsePLUS {
         return s.conn.Close()
     } else {
@@ -233,7 +233,7 @@ func (s *server) writeToPLUS(plusConnection *PLUS.Connection, data []byte) error
     fmt.Println("server.go: writeToPLUS")
 
     if(s.config.UsePLUS) {
-        err := plusConnection.Write(data)
+        _, err := plusConnection.Write(data)
         return err
     } else {
         return nil
@@ -312,7 +312,7 @@ func (s *server) handlePacketPLUS(pconn net.PacketConn, remoteAddr net.Addr, pac
 
 		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, version, remoteAddr)
 		var handshakeChan <-chan handshakeEvent
-        
+
 		session, handshakeChan, err = s.newSession(
 			&conn{pconn: pconn, currentAddr: remoteAddr},
 			version,
