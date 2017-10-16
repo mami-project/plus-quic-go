@@ -95,7 +95,7 @@ func crawlJob(jobs chan string, urls chan string) {
 		select {
 		case url, ok := <- jobs:
 			if ok {
-				utils.Infof("Now: %s", url)
+				utils.Infof("Going to crawl %s...", url)
 				crawl(url, urls)
 			} else {
 				return
@@ -116,7 +116,7 @@ func crawlLoop(urls chan string) {
 		select {
 			case url, ok := <- urls:
 				if ok {
-					utils.Infof("Got url!")
+					utils.Infof("Adding %s to crawl list...", url)
 					go func() {
 						jobs <- url
 					}()
