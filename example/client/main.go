@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"sync"
 	"crypto/tls"
+	"fmt"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -50,7 +52,12 @@ func follow(addr string, buf io.Reader, urls chan string) {
 						nurl := abs.String()
 
 						utils.Infof("Queueing %s", nurl)
-						urls <- nurl
+						select {
+							case	urls <- nurl:
+							default:
+								utils.Infof("TOO MUCH STUFF")
+								return
+						}
 						utils.Infof("Queued %s", nurl)
 					}
 				}
@@ -59,12 +66,22 @@ func follow(addr string, buf io.Reader, urls chan string) {
 	}
 }
 
-func crawl(url string, urls chan string) {
+type stats struct {
+	peak float64
+	speed_sum float64
+	size_sum uint64
+	n uint32
+	mutex *sync.Mutex
+}
+
+func crawl(url string, urls chan string, stats *stats) {
 	utils.Infof("Crawling %s", url)
 
 	hclient := &http.Client{
 		Transport: &h2quic.QuicRoundTripper{TLSClientConfig: &tls.Config{InsecureSkipVerify:true}},
 	}
+
+	start := time.Now()
 
 	rsp, err := hclient.Get(url)
 
@@ -72,6 +89,8 @@ func crawl(url string, urls chan string) {
 		utils.Infof("Error %s while crawling %s!", err.Error(), url)
 		return
 	}
+
+
 
 	utils.Infof("Status code: %d", rsp.StatusCode)
 
@@ -83,6 +102,25 @@ func crawl(url string, urls chan string) {
 		return
 	}
 
+	end := time.Now()
+	elapsed := end.Sub(start).Seconds()
+
+	speed := float64(body.Len())/elapsed
+
+	stats.mutex.Lock()
+
+	if stats.peak < speed {
+		stats.peak = speed
+	}
+
+	stats.speed_sum += speed
+	stats.size_sum += uint64(body.Len())
+	stats.n += 1
+
+	stats.mutex.Unlock()
+
+	utils.Infof("Speed: %f, elapsed: %f", speed / (1024.0*1024.0), elapsed)
+
 	rsp.Body.Close()
 
 	if rsp.StatusCode == 200 {
@@ -90,38 +128,54 @@ func crawl(url string, urls chan string) {
 	}
 }
 
-func crawlJob(jobs chan string, urls chan string) {
+func crawlWorker(urls chan string, stats *stats) {
 	for {
-		select {
-		case url, ok := <- jobs:
-			if ok {
-				utils.Infof("Going to crawl %s...", url)
-				crawl(url, urls)
-			} else {
-				return
-			}
-		}
+		
 	}
 }
 
-func crawlLoop(urls chan string) {
-	jobs := make(chan string)
-
-	go crawlJob(jobs, urls)
-	go crawlJob(jobs, urls)
-	go crawlJob(jobs, urls)
+func crawlLoop(urls chan string, stats *stats, maxOutstanding int) {
+	var wg sync.WaitGroup
+	outstanding := 0
+	started := false
+	done := make(chan bool)
 
 	for {
-		utils.Infof("Wait for next url...")
+		utils.Infof("Wait for next url... (%d)", maxOutstanding)
 		select {
 			case url, ok := <- urls:
+				started = true
+
 				if ok {
-					utils.Infof("Adding %s to crawl list...", url)
+					if outstanding >= maxOutstanding {
+						utils.Infof("Too many open requests.... waiting for slot.")
+						_ = <- done
+						outstanding -= 1
+					}
+
+					outstanding += 1
+					wg.Add(1)
 					go func() {
-						jobs <- url
+						crawl(url, urls, stats)
+						wg.Done()
+						done <- true
 					}()
 				} else {
 					return
+				}
+
+			default:
+				if !started {
+					continue
+				}
+
+				if outstanding == 0 {
+					utils.Infof("...")
+					return
+				} else {
+					utils.Infof("Waiting for new data...")
+					_ = <- done
+					outstanding -= 1
 				}
 		}
 	}
@@ -129,6 +183,7 @@ func crawlLoop(urls chan string) {
 
 func main() {
 	verbose := flag.Bool("v", false, "verbose")
+	maxOutstanding := flag.Int("o", 1, "Max outstanding (concurrent) requests")
 	flag.Parse()
 	urls := flag.Args()
 
@@ -138,16 +193,29 @@ func main() {
 		utils.SetLogLevel(utils.LogLevelInfo)
 	}
 
+	stats := &stats{}
+	stats.mutex = &sync.Mutex{}
+
 	var wg sync.WaitGroup
 	wg.Add(len(urls))
 	for _, addr := range urls {
 		utils.Infof("GET %s", addr)
-		ch := make(chan string)
+		ch := make(chan string, 8192)
 		go func() {
-			crawlLoop(ch)
+			crawlLoop(ch, stats, *maxOutstanding)
 			wg.Done()
 		}()
 		ch <- addr
 	}
 	wg.Wait()
+
+	fmt.Printf("Done...\n\n")
+	fmt.Printf("Stats:\n")
+	fmt.Printf("  Links crawled: %d\n", stats.n)
+	total_mb := float64(stats.size_sum)/(1024.0*1024.0)
+	speed_mb := float64(stats.speed_sum)/(1024.0*1024.0)
+	fmt.Printf("  Total MiB downloaded: %f\n", total_mb)
+	fmt.Printf("  Average file size (MiB): %f\n", total_mb / float64(stats.n))
+	fmt.Printf("  Average download speed (MiB/s): %f\n", speed_mb / float64(stats.n))
+	fmt.Printf("  Peak (MiB/s): %.6f\n", stats.peak / (1024.0*1024.0))
 }
