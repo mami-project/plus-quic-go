@@ -10,12 +10,18 @@ import (
 	"crypto/tls"
 	"fmt"
 	"time"
+	//"log"
+	"math"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/utils"
 
 	"golang.org/x/net/html"
 )
+
+import _ "net/http/pprof"
+
+
 
 func follow(addr string, buf io.Reader, urls chan string) {
 	tokenizer := html.NewTokenizer(buf)
@@ -67,7 +73,9 @@ func follow(addr string, buf io.Reader, urls chan string) {
 }
 
 type stats struct {
-	peak float64
+	max_speed float64
+	min_speed float64
+	
 	speed_sum float64
 	size_sum uint64
 	n uint32
@@ -109,8 +117,12 @@ func crawl(url string, urls chan string, stats *stats) {
 
 	stats.mutex.Lock()
 
-	if stats.peak < speed {
-		stats.peak = speed
+	if stats.max_speed < speed {
+		stats.max_speed = speed
+	}
+
+	if stats.min_speed > speed {
+		stats.min_speed = speed
 	}
 
 	stats.speed_sum += speed
@@ -182,6 +194,11 @@ func crawlLoop(urls chan string, stats *stats, maxOutstanding int) {
 }
 
 func main() {
+	//go func() {
+	//	log.Println(http.ListenAndServe("localhost:9090", nil))
+	//}()
+
+
 	verbose := flag.Bool("v", false, "verbose")
 	maxOutstanding := flag.Int("o", 1, "Max outstanding (concurrent) requests")
 	flag.Parse()
@@ -194,6 +211,8 @@ func main() {
 	}
 
 	stats := &stats{}
+	stats.max_speed = 0.0
+	stats.min_speed = math.MaxFloat64
 	stats.mutex = &sync.Mutex{}
 
 	var wg sync.WaitGroup
@@ -217,5 +236,6 @@ func main() {
 	fmt.Printf("  Total MiB downloaded: %f\n", total_mb)
 	fmt.Printf("  Average file size (MiB): %f\n", total_mb / float64(stats.n))
 	fmt.Printf("  Average download speed (MiB/s): %f\n", speed_mb / float64(stats.n))
-	fmt.Printf("  Peak (MiB/s): %.6f\n", stats.peak / (1024.0*1024.0))
+	fmt.Printf("  Max. speed (MiB/s): %.6f\n", stats.max_speed / (1024.0*1024.0))
+	fmt.Printf("  Min. speed (MiB/s): %.6f\n", stats.min_speed / (1024.0*1024.0))
 }

@@ -11,35 +11,68 @@ import (
 	"log"
 	"os"
 	"math/big"
+	"time"
+	"flag"
+	"runtime/pprof"
+	"runtime"
 
 	quic "github.com/lucas-clemente/quic-go"
-    //"github.com/lucas-clemente/quic-go/utils"
-	"plus"
+   //"github.com/lucas-clemente/quic-go/utils"
+	//"plus"
 )
 
 const addr = "localhost:4242"
 
-const message = "foobar"
-
 // We start a server echoing data on the first stream the client opens,
 // then connect with a client, send the message, and wait for its receipt.
 func main() {
-    //utils.SetLogLevel(utils.LogLevelDebug)
-	PLUS.LoggerDestination = os.Stdout
+	mode := flag.Bool("m", true, "Client?")
+	usePlus := flag.Bool("plus", true, "PLUS?")
+	cpuprofile := flag.String("cp", "", "cpuprofile")
+	memprofile := flag.String("mp", "", "memprofile")
+	
 
-	go func() { log.Fatal(echoServer()) }()
+	flag.Parse()
+   //utils.SetLogLevel(utils.LogLevelDebug)
+	//PLUS.LoggerDestination = os.Stdout
 
-	err := clientMain()
-	if err != nil {
-		panic(err)
+	if *cpuprofile != "" {
+        f, err := os.Create(*cpuprofile)
+        if err != nil {
+            log.Fatal("could not create CPU profile: ", err)
+        }
+        if err := pprof.StartCPUProfile(f); err != nil {
+            log.Fatal("could not start CPU profile: ", err)
+        }
+        defer pprof.StopCPUProfile()
 	}
+
+	if !(*mode) {
+		fmt.Println("SERVER")
+		echoServer(*usePlus)
+	} else {
+		fmt.Println("CLIENT")
+		clientMain(*usePlus)
+	}
+
+	if *memprofile != "" {
+        f, err := os.Create(*memprofile)
+        if err != nil {
+            log.Fatal("could not create memory profile: ", err)
+        }
+        runtime.GC() // get up-to-date statistics
+        if err := pprof.WriteHeapProfile(f); err != nil {
+            log.Fatal("could not write memory profile: ", err)
+        }
+        f.Close()
+    }
 }
 
 // Start a server that echos all data on the first stream opened by the client
-func echoServer() error {
+func echoServer(usePLUS bool) error {
 	cfgServer := &quic.Config{
 		TLSConfig: generateTLSConfig(),
-        UsePLUS: true,
+        UsePLUS: usePLUS,
 	}
 	listener, err := quic.ListenAddr(addr, cfgServer)
 	if err != nil {
@@ -53,15 +86,44 @@ func echoServer() error {
 	if err != nil {
 		panic(err)
 	}
-	// Echo through the loggingWriter
-	_, err = io.Copy(loggingWriter{stream}, stream)
-	return err
+
+	// Copy it all.
+	data := make([]byte, 4096)
+	bytesRead := uint64(0)
+
+	start_time := time.Now()
+
+	i := 0
+
+	for {
+		n, err := stream.Read(data)
+		bytesRead += uint64(n)
+		fmt.Printf("got something %d %d\n", bytesRead, n)
+		if bytesRead >= (1024*1024*50) {
+			end_time := time.Now()
+			delta := end_time.Sub(start_time).Seconds()
+			fmt.Printf("Bytes read so far: %d\n", bytesRead)
+			fmt.Printf("Speed: %f MiB/s\n", (float64(bytesRead)/delta)/(1024.0*1024.0))
+			bytesRead = 0
+			start_time = time.Now()
+			i += 1
+			if i >= 7 {
+				return nil
+			}
+		}
+
+		stream.Write(data)
+
+		if err != nil {
+			return err
+		}
+	}
 }
 
-func clientMain() error {
+func clientMain(usePLUS bool) error {
 	cfgClient := &quic.Config{
 		TLSConfig: &tls.Config{InsecureSkipVerify: true},
-        UsePLUS: true,
+        UsePLUS: usePLUS,
 	}
 	session, err := quic.DialAddr(addr, cfgClient)
 	if err != nil {
@@ -75,18 +137,20 @@ func clientMain() error {
 		return err
 	}
 
-	fmt.Printf("Client: Sending '%s'\n", message)
-	_, err = stream.Write([]byte(message))
-	if err != nil {
-		return err
+	fmt.Printf("Client: Sending...\n")
+
+	buf := make([]byte, 4096)
+	buf[0] = 1
+	buf[1] = 99
+	buf[405] = 255
+
+	for i := 0; i < 327680; i++ { 
+		_, err = stream.Write(buf)
+		if err != nil {
+			return err
+		}
 	}
 
-	buf := make([]byte, len(message))
-	_, err = io.ReadFull(stream, buf)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Client: Got '%s'\n", buf)
 
 	return nil
 }

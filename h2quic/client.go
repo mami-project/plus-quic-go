@@ -55,7 +55,7 @@ func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Cli
 		config: &quic.Config{
 			TLSConfig:                     tlsConfig,
 			RequestConnectionIDTruncation: true,
-			UsePLUS: true,
+			UsePLUS: false,
 		},
 		dialChan: make(chan struct{}),
 	}
