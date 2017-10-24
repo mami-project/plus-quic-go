@@ -86,7 +86,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 	config := quic.Config{
 		TLSConfig: tlsConfig,
 		Versions:  protocol.SupportedVersions,
-		UsePLUS: false,
+		UsePLUS: true,
 	}
 
 	var ln quic.Listener
