@@ -2,7 +2,6 @@ package quic
 
 import (
 	"sync"
-
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 

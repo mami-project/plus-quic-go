@@ -12,7 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
-    "plus"
+   "github.com/mami-project/plus-lib"
 )
 
 type client struct {
@@ -182,7 +182,17 @@ func (c *client) listenPLUS() {
 			}
 			break
 		}
-		data := plusPacket.Payload()
+
+		data := getPacketBuffer()
+		data = data[:protocol.MaxReceivePacketSize]
+
+		payload := plusPacket.Payload()
+		  
+      copy(data, payload)
+		//fmt.Printf("len(data) := %d, len(payload) := %d, cap(data) := %d\n", len(data), len(payload), cap(data))
+		data = data[:len(payload)]
+
+		c.plusConnManager.ReturnPacketAndBuffer(plusPacket)
         
 
 		err = c.handlePacketPLUS(remoteAddr, data, connection)

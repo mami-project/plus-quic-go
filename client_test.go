@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"plus"
+	"github.com/mami-project/plus-lib"
 )
 
 var _ = Describe("Client", func() {
