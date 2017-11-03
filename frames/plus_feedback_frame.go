@@ -69,7 +69,7 @@ func (f *PLUSFeedbackFrame) Write(b *bytes.Buffer, version protocol.VersionNumbe
 	}
 
 	// Write len byte
-	if len(f.Data) >= 64 {
+	if len(f.Data) > 255 {
 		return errInvalidLenByte
 	}
 
