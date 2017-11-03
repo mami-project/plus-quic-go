@@ -44,11 +44,7 @@ func ParsePLUSFeedbackFrame(r *bytes.Reader) (*PLUSFeedbackFrame, error) {
 	// read the len byte
 	lenByte, err := r.ReadByte()
 
-	// Since PCF value is limited to 64 bytes pcf feedback 
-    // can also be 64 bytes max.
-	if lenByte >= 64 {
-		return nil, errInvalidLenByte
-	}
+	
 
 	data := make([]byte, lenByte)
 
