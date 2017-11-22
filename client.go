@@ -172,7 +172,7 @@ func (c *client) listenPLUS() {
     fmt.Println("listenPLUS")
 
 	for {
-		connection, plusPacket, remoteAddr, _, err := c.plusConnManager.ReadAndProcessPacket()
+		connection, plusPacket, remoteAddr, feedbackData_, err := c.plusConnManager.ReadAndProcessPacket()
         
         
         
@@ -192,10 +192,14 @@ func (c *client) listenPLUS() {
 		//fmt.Printf("len(data) := %d, len(payload) := %d, cap(data) := %d\n", len(data), len(payload), cap(data))
 		data = data[:len(payload)]
 
+		feedbackData := getPacketBuffer()
+	   copy(feedbackData, feedbackData_)
+		feedbackData = feedbackData[:len(feedbackData_)] 
+
 		c.plusConnManager.ReturnPacketAndBuffer(plusPacket)
         
 
-		err = c.handlePacketPLUS(remoteAddr, data, connection)
+		err = c.handlePacketPLUS(remoteAddr, data, connection, feedbackData)
 		if err != nil {
 			utils.Errorf("error handling PLUS packet: %s", err.Error())
 			c.session.Close(err)
@@ -239,10 +243,10 @@ func (c *client) listen() {
 }
 
 func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
-    return c.handlePacketPLUS(remoteAddr, packet, nil)
+    return c.handlePacketPLUS(remoteAddr, packet, nil, nil)
 }
 
-func (c *client) handlePacketPLUS(remoteAddr net.Addr, packet []byte, connection *PLUS.Connection) error {
+func (c *client) handlePacketPLUS(remoteAddr net.Addr, packet []byte, connection *PLUS.Connection, feedbackData []byte) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
