@@ -312,9 +312,9 @@ runLoop:
 			}
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
-			if !s.config.UsePLUS {
-                putPacketBuffer(p.publicHeader.Raw)
-            }
+			//if !s.config.UsePLUS {
+         putPacketBuffer(p.publicHeader.Raw)
+         //}
 		case l, ok := <-aeadChanged:
 			if !ok { // the aeadChanged chan was closed. This means that the handshake is completed.
 				s.handshakeComplete = true
