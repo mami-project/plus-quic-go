@@ -833,6 +833,7 @@ func (s *session) WaitUntilHandshakeComplete() error {
 }
 
 func (s *session) queuePLUSFeedbackFrame(data []byte) {
+	utils.Infof("Queue PLUSFeedbackFrame: %d", data)
 	s.packer.QueueControlFrameForNextPacket(&frames.PLUSFeedbackFrame{
 		Data: data,
 	})
