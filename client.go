@@ -192,9 +192,13 @@ func (c *client) listenPLUS() {
 		//fmt.Printf("len(data) := %d, len(payload) := %d, cap(data) := %d\n", len(data), len(payload), cap(data))
 		data = data[:len(payload)]
 
-		feedbackData := getPacketBuffer()
-	   copy(feedbackData, feedbackData_)
-		feedbackData = feedbackData[:len(feedbackData_)] 
+		var feedbackData []byte = nil
+
+		if feedbackData_ != nil {
+			feedbackData = getPacketBuffer()
+			copy(feedbackData, feedbackData_)
+			feedbackData = feedbackData[:len(feedbackData_)] 
+		}
 
 		c.plusConnManager.ReturnPacketAndBuffer(plusPacket)
         

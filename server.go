@@ -135,9 +135,13 @@ func (s *server) servePLUS() {
 		  data := getPacketBuffer()
 		  data = data[:protocol.MaxReceivePacketSize]
 
-		  feedbackData := getPacketBuffer()
-	     copy(feedbackData, feedbackData_)
-		  feedbackData = feedbackData[:len(feedbackData_)] 
+		  var feedbackData []byte = nil
+
+		  if feedbackData_ != nil {
+		  	feedbackData = getPacketBuffer()
+	     	copy(feedbackData, feedbackData_)
+		  	feedbackData = feedbackData[:len(feedbackData_)] 
+		  }
 
 		  payload := plusPacket.Payload()
 		  
