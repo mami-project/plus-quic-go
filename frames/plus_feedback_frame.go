@@ -24,7 +24,7 @@ type PLUSFeedbackFrame struct {
 // Returns the FULL length. Not if packet_packer/stream_framer can handle variably sized
 // *control* frames.
 func (f *PLUSFeedbackFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	return protocol.ByteCount(1 + len(f.Data)), nil
+	return protocol.ByteCount(2 + len(f.Data)), nil
 }
 
 // ParsePLUSFeedbackFrame reads a pcf frame
