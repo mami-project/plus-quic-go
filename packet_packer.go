@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/frames"
@@ -183,6 +184,16 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	if protocol.ByteCount(buffer.Len()+12) > protocol.MaxPacketSize {
+		fmt.Printf("len payload frames: %d\n", len(payloadFrames))
+		fmt.Printf("stopWaitingFrame %v\n", stopWaitingFrame)
+		fmt.Printf("hasNonCryptoStreamData %v\n", hasNonCryptoStreamData)
+		for _, frame := range payloadFrames {
+			fmt.Printf("typeof frame: %s\n", reflect.TypeOf(frame))
+			bc, _ := frame.MinLength(p.version)
+			fmt.Printf("min length: %d\n", bc)
+		}
+		fmt.Printf("buffer.Len := %d\n", buffer.Len())
+		fmt.Printf("buffer: %d\n", buffer)
 		return nil, errors.New("PacketPacker BUG: packet too large")
 	}
 
