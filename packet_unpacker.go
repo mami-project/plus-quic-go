@@ -97,6 +97,9 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 				frame, err = frames.ParsePingFrame(r)
 			case 0x08:
 				frame, err = frames.ParsePLUSFeedbackFrame(r)
+				fmt.Printf("PLUSFeedbackFrame\n")
+				fmt.Printf("len: %d\n", len(frame.(*frames.PLUSFeedbackFrame).Data))
+				fmt.Printf("data: %d\n", frame.(*frames.PLUSFeedbackFrame).Data)
 			default:
 				err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
 			}
