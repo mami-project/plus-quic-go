@@ -10,5 +10,5 @@ The path option may be omitted in which case the data is downloaded to 'memory' 
 If program terminates normally (see exit code) the last line contains CSV data of the form
 
 ```
-speed in MiB/s;Time elapsed in seconds;HTTP Status Code
+successful (true/false);timestamp;speed in MiB/s;Time elapsed in seconds;HTTP Status Code;error message (if any)
 ```
