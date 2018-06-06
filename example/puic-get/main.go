@@ -72,19 +72,19 @@ func main() {
 
 	log("Fetching `%s' ...\n", *fetchURL)
 
-	speed, elapsed, status, err := fetch(*fetchURL, dst)
+	n, speed, elapsed, status, err := fetch(*fetchURL, dst)
 
 	if err != nil {
-		resultStr := fmt.Sprintf("%v;%d;%f;%f;%d;%q\n", false, now.Unix(), speed, elapsed, status, err.Error())
+		resultStr := fmt.Sprintf("%v;%d;%d;%f;%f;%d;%q\n", false, now.Unix(), n, speed, elapsed, status, err.Error())
 		output(resultStr, dataFile)
 		panic(err)
 	}
 
-	resultStr := fmt.Sprintf("%v;%d;%f;%f;%d;%q\n", true, now.Unix(), speed, elapsed, status, "")
+	resultStr := fmt.Sprintf("%v;%d;%d;%f;%f;%d;%q\n", true, now.Unix(), n, speed, elapsed, status, "")
 	output(resultStr, dataFile)
 }
 
-func fetch(url string, dst io.Writer) (float64, float64, int, error) {
+func fetch(url string, dst io.Writer) (int64, float64, float64, int, error) {
 	log("Creating h2client...\n")
 
 	hclient := &http.Client{
@@ -96,7 +96,7 @@ func fetch(url string, dst io.Writer) (float64, float64, int, error) {
 	rsp, err := hclient.Get(url)
 
 	if err != nil {
-		return 0.0, 0.0, -1, err
+		return 0, 0.0, 0.0, -1, err
 	}
 
 	log("Status code: %d\n", rsp.StatusCode)
@@ -114,5 +114,5 @@ func fetch(url string, dst io.Writer) (float64, float64, int, error) {
 
 	rsp.Body.Close()
 
-	return speed, elapsed, rsp.StatusCode, err
+	return n, speed, elapsed, rsp.StatusCode, err
 }
