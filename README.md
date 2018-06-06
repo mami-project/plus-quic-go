@@ -1,3 +1,9 @@
+**THIS IS A FORK**.
+
+Please be aware that this is a fork that uses the same import path (lucas-clemente/quic-go). This fork has
+support for PLUS and is also not up-to-date with the current lucas-clemente/quic-go. Be sure you place this
+fork under lucas-clemente/quic-go (which you can do by manually cloning it or by git remote trickery). 
+
 # A QUIC implementation in pure Go
 
 <img src="docs/quic.png" width=303 height=124>
