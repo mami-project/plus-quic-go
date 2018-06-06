@@ -10,5 +10,9 @@ A simple H2QUIC server. It provides the methods:
 Usage:
 
 ```
-./wwwsrv -laddr=localhost:6121 -prefix=/data/
+./wwwsrv -laddr=localhost:6121 -prefix=/data/ -certpath=./
 ```
+
+certpath must point to a directory containing the two files `fullchain.pem` and `privkey.pem`. You can use
+the pems that reside directly in the example directory. 
+
