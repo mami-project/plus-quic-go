@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
@@ -14,10 +15,13 @@ import (
 	"encoding/json"
 	"path"
 	"net"
+	"crypto/x509"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 )
 
+// opens a file in append,wronly,create,0600 mode
+// or panics if that's not possible.
 func openAppendOrDie(path string, log io.Writer) *os.File {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 
@@ -29,6 +33,8 @@ func openAppendOrDie(path string, log io.Writer) *os.File {
 	return f
 }
 
+// writes a msg (fmt) with args or panics if that's not
+// possible.
 func writeOrDie(dst io.Writer, msg string, args... interface{}) {
 	now := time.Now().Unix()
 	_, err := io.WriteString(dst, fmt.Sprintf("%d\t", now) + fmt.Sprintf(msg, args...) + "\n")
@@ -47,59 +53,43 @@ type Stats struct {
 	Now int64
 }
 
-func main() {
-	var urls = flag.String("urls", "", "URLs to fetch.")
-	var logfilePath = flag.String("logfile", "puic-poll.log", "File to write debug information to.")
-	var waitFrom = flag.Int("wait-from", 1000, "Minimum time to wait in milliseconds before making the next request.")
-	var waitTo = flag.Int("wait-to", 5000, "Maximum time to wait in milliseconds before making the next request.")
-	var collect = flag.Int("collect", 1024, "How many statistics items to collect in a single output file.")
-	var odir = flag.String("odir", "./tmp/", "Output directory.")
-	var ifaceName = flag.String("iface", "op0", "Interface to use.")
+// Create a HTTP Client using an H2Quic QuicRoundTripper that determines
+// the LocalAddr to listen on based on the iface name provided. 
+// (it'll pick the first address of that interface). If the interface name
+// provided is an empty string it'll listen on the zero address. 
+func createHttpClient(ifaceName string, log io.Writer) (*http.Client, error) {
+	if ifaceName == "" {
+		hclient := &http.Client{
+			Transport: &h2quic.QuicRoundTripper{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+		}
 
-	flag.Parse()
-
-	var logfile *os.File
-	var ofile *os.File
-	
-	// Logging setup
-	collectedStats := make([]Stats, *collect)
-	fname := fmt.Sprintf("puic-poll-%d.json", time.Now().UnixNano())
-	j := 0
-
-	// Open log file
-	if *logfilePath != "" {
-		logfile = openAppendOrDie(*logfilePath, nil)
-		
-		defer logfile.Close()
-	} else {
-		logfile = os.Stdout
+		return hclient, nil
 	}
 
 	// Figure out the ip address of the specified interface
 	// then pick the first one later on to use as LocalAddr
-	iface, err := net.InterfaceByName(*ifaceName)
+	iface, err := net.InterfaceByName(ifaceName)
 
 	if err != nil {
-		writeOrDie(logfile, "ERR: Error using interface %q: %q", *ifaceName, err.Error())
-		panic(err)
+		return nil, fmt.Errorf("ERR: Error using interface %q: %q", ifaceName, err.Error())
 	}
 
 	addrs, err := iface.Addrs()
 
 	if err != nil {
-		writeOrDie(logfile, "ERR: Error using interface %q: %q", *ifaceName, err.Error())
-		panic(err)
+		return nil, fmt.Errorf("ERR: Error using interface %q: %q", ifaceName, err.Error())
 	}
 
 	if len(addrs) < 1 {
-		writeOrDie(logfile, "ERR: Interface %q has no addresses?", *ifaceName)
-		panic("Interface has no addresses")
+		return nil, fmt.Errorf("ERR: Interface %q has no addresses?", ifaceName)
 	}
 
 	ipAddr := addrs[0].(*net.IPNet).IP
 	udpAddr := &net.UDPAddr { IP: ipAddr }
 
-	writeOrDie(logfile, "Using %q", udpAddr.String())
+	writeOrDie(log, "Using %q", udpAddr.String())
 
 	hclient := &http.Client{
 		Transport: &h2quic.QuicRoundTripper{
@@ -108,7 +98,107 @@ func main() {
 		},
 	}
 
-	ofile = openAppendOrDie(path.Join(*odir, fname), logfile)
+	return hclient, nil
+}
+
+// Opens the logfile. If the path is an empty string
+// it'll point to stdout. Panics if the logfile can not be opened.
+func openLogfile(logfilePath string) *os.File {
+	if logfilePath != "" {
+		logfile := openAppendOrDie(logfilePath, nil)
+
+		return logfile
+	} else {
+		return os.Stdout
+	}
+}
+
+// Return the name of the next output file name
+func getOFileName() string {
+	return fmt.Sprintf("puic-poll-%d.json", time.Now().UnixNano())
+}
+
+// Open the next output file in append,wronly,create,0600 mode.
+func openNextOutputFile(odir string) (*os.File, error) {
+	fpath := path.Join(odir, getOFileName())
+
+	f, err := os.OpenFile(fpath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+
+	if err != nil {
+		return nil, err
+	} else {
+		return f, nil
+	}
+}
+
+// Sleep for at least waitFrom but at most waitTo ms
+func wait(waitFrom int, waitTo int) {
+	wait := waitFrom + (rand.Int() % (waitTo - waitFrom))
+
+	time.Sleep(time.Duration(wait) * time.Millisecond)
+}
+
+func loadCerts(certs string, hclient *http.Client) error {
+	rt := hclient.Transport.(*h2quic.QuicRoundTripper)
+	rt.TLSClientConfig.InsecureSkipVerify = false
+
+	// Load CA certs
+	caCert, err := ioutil.ReadFile(certs)
+
+	if err != nil {
+		return err
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+
+	rt.TLSClientConfig.RootCAs = caCertPool
+
+	return nil
+}
+
+func main() {
+	var urls = flag.String("urls", "", "URLs to fetch (; delimited).")
+	var logfilePath = flag.String("logfile", "puic-poll.log", "File to write debug information to.")
+	var waitFrom = flag.Int("wait-from", 1000, "Minimum time to wait in milliseconds before making the next request.")
+	var waitTo = flag.Int("wait-to", 5000, "Maximum time to wait in milliseconds before making the next request.")
+	var collect = flag.Int("collect", 1024, "How many statistics items to collect in a single output file.")
+	var odir = flag.String("odir", "./tmp/", "Output directory.")
+	var ifaceName = flag.String("iface", "op0", "Interface to use.")
+	var certs = flag.String("certs", "", "Path to certificates to be trusted as Root CAs.")
+
+	flag.Parse()
+
+	
+	// Logging setup
+	collectedStats := make([]Stats, *collect)
+	j := 0
+
+	logfile := openLogfile(*logfilePath)
+	defer logfile.Close()
+	
+	ofile, err := openNextOutputFile(*odir)
+
+	if err != nil {
+		writeOrDie(logfile, "ERR: Error opening output file: %q", err.Error())
+		panic(err)
+	}
+
+	hclient, err := createHttpClient(*ifaceName, logfile)
+
+	if err != nil {
+		writeOrDie(logfile, "ERR: Error creating h2client: %q", err.Error())
+		panic(err)
+	}
+
+	if *certs != "" {
+		err := loadCerts(*certs, hclient)
+
+		if err != nil {
+			writeOrDie(logfile, "ERR: Error loading certs: %q", err.Error())
+			panic(err)
+		}
+	}
 
 	urlsToFetch := strings.Split(*urls, ";")
 
@@ -157,14 +247,17 @@ func main() {
 			// Reset counter to zero, close the output file and open a new 
 			// output file
 			j = 0
-			ofile.Close() 
-			fname = fmt.Sprintf("puic-poll-%d.json", time.Now().UnixNano())
-			ofile = openAppendOrDie(path.Join(*odir, fname), logfile)
+			ofile.Close()
+
+			ofile, err = openNextOutputFile(*odir)
+
+			if err != nil {
+				writeOrDie(logfile, "ERR: Error opening output file: %q", err.Error())
+				panic(err)
+			}
 		}
 
-		wait := *waitFrom + (rand.Int() % (*waitTo - *waitFrom))
-
-		time.Sleep(time.Duration(wait) * time.Millisecond)
+		wait(*waitFrom, *waitTo)
 	}
 }
 
