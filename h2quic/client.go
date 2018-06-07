@@ -61,6 +61,22 @@ func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Cli
 	}
 }
 
+func NewClientEx(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string, laddr *net.UDPAddr) *Client {
+	return &Client{
+		t:               t,
+		dialAddr:        quic.DialAddrFunc(laddr),
+		hostname:        authorityAddr("https", hostname),
+		responses:       make(map[protocol.StreamID]chan *http.Response),
+		encryptionLevel: protocol.EncryptionUnencrypted,
+		config: &quic.Config{
+			TLSConfig:                     tlsConfig,
+			RequestConnectionIDTruncation: true,
+			UsePLUS: true,
+		},
+		dialChan: make(chan struct{}),
+	}
+}
+
 // Dial dials the connection
 func (c *Client) Dial() (err error) {
 	defer func() {

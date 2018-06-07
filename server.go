@@ -121,7 +121,7 @@ func populateServerConfig(config *Config) *Config {
 
 // serve with PLUS
 func (s *server) servePLUS() {
-    fmt.Println("servePLUS")
+    utils.Infof("servePLUS")
     for {
         plusConnection, plusPacket, remoteAddr, feedbackData_, err := s.plusConnManager.ReadAndProcessPacket()
 
@@ -245,7 +245,7 @@ func (s *server) writeTo(pconn net.PacketConn, data []byte, remoteAddr net.Addr)
 }
 
 func (s *server) writeToPLUS(plusConnection *PLUS.Connection, data []byte) error {
-    fmt.Println("server.go: writeToPLUS")
+    //fmt.Println("server.go: writeToPLUS")
 
     if(s.config.UsePLUS) {
         _, err := plusConnection.Write(data)

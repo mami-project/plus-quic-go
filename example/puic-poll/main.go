@@ -12,18 +12,21 @@ import (
 	"strings"
 	"math/rand"
 	"encoding/json"
+	"path"
+	"net"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 )
 
-func openAppend(path string) (*os.File, error) {
+func openAppendOrDie(path string, log io.Writer) *os.File {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 
 	if err != nil {
-		return nil, err
+		writeOrDie(log, "ERR: Error %q", err.Error())
+		panic(err)
 	}
 
-	return f, nil
+	return f
 }
 
 func writeOrDie(dst io.Writer, msg string, args... interface{}) {
@@ -41,58 +44,63 @@ type Stats struct {
 	Speed float64
 	Elapsed float64
 	StatusCode int
-	Message string
 	Now int64
 }
 
 func main() {
 	var urls = flag.String("urls", "", "URLs to fetch.")
 	var logfilePath = flag.String("logfile", "puic-poll.log", "File to write debug information to.")
-	var statsfilePath = flag.String("statsfile", "puic-poll.csv", "File to write statistics to.")
-	var wait = flag.Int("wait", 1, "Time to wait in seconds before making the next request.")
-	var collect = flag.Int("collect", 10, "How many statistics items to collect before sending them.")
-	var sendto = flag.String("send-to", "", "Where to send statistics to.")
+	var waitFrom = flag.Int("wait-from", 1000, "Minimum time to wait in milliseconds before making the next request.")
+	var waitTo = flag.Int("wait-to", 5000, "Maximum time to wait in milliseconds before making the next request.")
+	var collect = flag.Int("collect", 1024, "How many statistics items to collect in a single output file.")
+	var odir = flag.String("odir", "./tmp/", "Output directory.")
+	var ifaceName = flag.String("iface", "op0", "Interface to use.")
 
 	flag.Parse()
 
 	var logfile *os.File
-	var statsfile *os.File
-	var err error
+	var ofile *os.File
 	
 	collectedStats := make([]Stats, *collect)
+	fname := fmt.Sprintf("puic-poll-%d.json", time.Now().UnixNano())
+
 	j := 0
 
 	if *logfilePath != "" {
-		logfile, err = openAppend(*logfilePath)
-
-		if err != nil {
-			panic(err)
-		}
-
+		logfile = openAppendOrDie(*logfilePath, nil)
 		
 		defer logfile.Close()
 	} else {
 		logfile = os.Stdout
 	}
 
-	if *statsfilePath != "" {
-		statsfile, err = openAppend(*statsfilePath)
+	iface, err := net.InterfaceByName(*ifaceName)
 
-		if err != nil {
-			writeOrDie(logfile, fmt.Sprintf("ERR: Could not open statsfile $q: %q", statsfilePath, err.Error()))
-			panic(err)
-		}
-
-		defer statsfile.Close()
-	} else {
-		statsfile = os.Stdout
+	if err != nil {
+		writeOrDie(logfile, "ERR: Error using interface %q: %q", *ifaceName, err.Error())
+		panic(err)
 	}
+
+	addrs, err := iface.Addrs()
+
+	if err != nil {
+		writeOrDie(logfile, "ERR: Error using interface %q: %q", *ifaceName, err.Error())
+		panic(err)
+	}
+
+	if len(addrs) < 1 {
+		writeOrDie(logfile, "ERR: Interface %q has no addresses?", *ifaceName)
+		panic("Interface has no addresses")
+	}
+
+	ipAddr := addrs[0].(*net.IPNet).IP
+	udpAddr := &net.UDPAddr { IP: ipAddr }
+
+	writeOrDie(logfile, "Using %q", udpAddr.String())
+
+	ofile = openAppendOrDie(path.Join(*odir, fname), logfile)
 
 	urlsToFetch := strings.Split(*urls, ";")
-
-	var netClient = &http.Client{
-	  Timeout: time.Second * 5,
-	}
 
 	for {
 
@@ -105,15 +113,14 @@ func main() {
 			Speed : speed,
 			Elapsed : elapsed,
 			StatusCode : statusCode,
-			Now : time.Now().Unix(),
+			Now : time.Now().UnixNano(),
 		}
 
 		if err != nil {
 			stats.Success = false
-			stats.Message = err.Error()
+			writeOrDie(logfile, fmt.Sprintf("ERR: Error: %q", err.Error()))
 		} else {
 			stats.Success = true
-			stats.Message = ""
 		}
 
 		collectedStats[j] = stats
@@ -127,29 +134,27 @@ func main() {
 
 		statstr := string(statbytes)
 
-		writeOrDie(statsfile, statstr)
+		_, err = io.WriteString(ofile, statstr+"\n")
+
+		if err != nil {
+			writeOrDie(logfile, "ERR: Error writing to output file: %q", err.Error())
+		}
 
 		j++
 
-		fmt.Println(j,*collect,*sendto)
-
 		if j >= *collect {
-			sendbytes, err := json.Marshal(collectedStats)
 
-			if err != nil {
-				writeOrDie(logfile, fmt.Sprintf("ERR: Error: %q", err.Error()))
-				panic(err)
-			}
-
-			if *sendto != "" {
-				writeOrDie(logfile, "Attempting to send...")
-				sendTo(netClient, *sendto, sendbytes, logfile)
-			}
-
+			// Reset counter to zero, close the output file and open a new 
+			// output file
 			j = 0
+			ofile.Close() 
+			fname = fmt.Sprintf("puic-poll-%d.json", time.Now().UnixNano())
+			ofile = openAppendOrDie(path.Join(*odir, fname), logfile)
 		}
 
-		time.Sleep(time.Duration(*wait) * time.Second)
+		wait := *waitFrom + (rand.Int() % (*waitTo - *waitFrom))
+
+		time.Sleep(time.Duration(wait) * time.Millisecond)
 	}
 }
 
