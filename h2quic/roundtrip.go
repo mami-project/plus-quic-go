@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"net"
 
 	"golang.org/x/net/lex/httplex"
 )
@@ -35,6 +36,8 @@ type QuicRoundTripper struct {
 	TLSClientConfig *tls.Config
 
 	clients map[string]h2quicClient
+
+	LocalAddr *net.UDPAddr
 }
 
 var _ http.RoundTripper = &QuicRoundTripper{}
@@ -93,7 +96,11 @@ func (r *QuicRoundTripper) getClient(hostname string) (h2quicClient, error) {
 
 	client, ok := r.clients[hostname]
 	if !ok {
-		client = NewClient(r, r.TLSClientConfig, hostname)
+		if r.LocalAddr == nil {
+			client = NewClient(r, r.TLSClientConfig, hostname)
+		} else {
+			client = NewClientEx(r, r.TLSClientConfig, hostname, r.LocalAddr)
+		}
 		err := client.Dial()
 		if err != nil {
 			return nil, err

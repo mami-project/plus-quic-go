@@ -98,6 +98,13 @@ func main() {
 
 	writeOrDie(logfile, "Using %q", udpAddr.String())
 
+	hclient := &http.Client{
+		Transport: &h2quic.QuicRoundTripper{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			LocalAddr : udpAddr,
+		},
+	}
+
 	ofile = openAppendOrDie(path.Join(*odir, fname), logfile)
 
 	urlsToFetch := strings.Split(*urls, ";")
@@ -106,7 +113,7 @@ func main() {
 
 		urlToFetch := urlsToFetch[rand.Int() % len(urlsToFetch)]
 
-		size, speed, elapsed, statusCode, err := fetchOnce(urlToFetch, logfile)
+		size, speed, elapsed, statusCode, err := fetchOnce(urlToFetch, hclient, logfile)
 
 		stats := Stats {
 			Size : size,
@@ -168,12 +175,8 @@ func sendTo(client *http.Client, url string, data []byte, log io.Writer) {
 	}
 }
 
-func fetchOnce(url string, log io.Writer) (int64, float64, float64, int, error) {
+func fetchOnce(url string, hclient *http.Client, log io.Writer) (int64, float64, float64, int, error) {
 	writeOrDie(log, "Start fetching %q", url)
-
-	hclient := &http.Client{
-		Transport: &h2quic.QuicRoundTripper{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-	}
 
 	start := time.Now()
 
