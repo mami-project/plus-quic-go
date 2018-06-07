@@ -61,11 +61,12 @@ func main() {
 	var logfile *os.File
 	var ofile *os.File
 	
+	// Logging setup
 	collectedStats := make([]Stats, *collect)
 	fname := fmt.Sprintf("puic-poll-%d.json", time.Now().UnixNano())
-
 	j := 0
 
+	// Open log file
 	if *logfilePath != "" {
 		logfile = openAppendOrDie(*logfilePath, nil)
 		
@@ -74,6 +75,8 @@ func main() {
 		logfile = os.Stdout
 	}
 
+	// Figure out the ip address of the specified interface
+	// then pick the first one later on to use as LocalAddr
 	iface, err := net.InterfaceByName(*ifaceName)
 
 	if err != nil {
@@ -165,16 +168,7 @@ func main() {
 	}
 }
 
-func sendTo(client *http.Client, url string, data []byte, log io.Writer) {
-	_, err := client.Post(url, "application/json", bytes.NewBuffer(data))
-
-	if err != nil {
-		writeOrDie(log, fmt.Sprintf("ERR: Could not send data to %q: %q", url, err.Error()))
-	} else {
-		writeOrDie(log, "Sent to %q", url)
-	}
-}
-
+// Make a single GET request to url using hclient while logging to log
 func fetchOnce(url string, hclient *http.Client, log io.Writer) (int64, float64, float64, int, error) {
 	writeOrDie(log, "Start fetching %q", url)
 
