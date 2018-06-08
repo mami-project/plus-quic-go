@@ -15,24 +15,9 @@ import (
 
 var fetchURL = flag.String("url", "", "URL to fetch.")
 var path = flag.String("path", "", "Path to save file to.")
-var verbose = flag.Bool("verbose", true, "Verbose?")
-var ofile = flag.String("ofile", "", "File to write statistics to")
 
 func log(msg string, args ...interface{}) {
-	if *verbose {
-		fmt.Printf(msg, args...)
-	}
-}
-
-func output(msg string, dataFile *os.File) {
-	log(msg)
-	if dataFile != nil {
-		_, err := dataFile.WriteString(msg)
-
-		if err != nil {
-			panic(err)
-		}
-	}
+	fmt.Printf(msg, args...)
 }
 
 func main() {
@@ -42,10 +27,7 @@ func main() {
 		panic("URL `%s' is not valid. Please specify an URL using -url.")
 	}
 
-	now := time.Now()
-
 	var dst io.Writer
-	var dataFile *os.File
 
 	if *path == "" {
 		dst = &bytes.Buffer{}
@@ -58,30 +40,11 @@ func main() {
 		dst = fi
 	}
 
-	if *ofile != "" {
-		f, err := os.OpenFile(*ofile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-
-		if err != nil {
-			panic(err)
-		}
-
-		defer f.Close()
-
-		dataFile = f
-	}
-
 	log("Fetching `%s' ...\n", *fetchURL)
 
 	n, speed, elapsed, status, err := fetch(*fetchURL, dst)
 
-	if err != nil {
-		resultStr := fmt.Sprintf("%v;%d;%d;%f;%f;%d;%q\n", false, now.Unix(), n, speed, elapsed, status, err.Error())
-		output(resultStr, dataFile)
-		panic(err)
-	}
-
-	resultStr := fmt.Sprintf("%v;%d;%d;%f;%f;%d;%q\n", true, now.Unix(), n, speed, elapsed, status, "")
-	output(resultStr, dataFile)
+	log("Bytes: %d, Speed: %f, Elapsed: %f, Status: %d, Err: %q\n", n, speed, elapsed, status, err)
 }
 
 func fetch(url string, dst io.Writer) (int64, float64, float64, int, error) {
