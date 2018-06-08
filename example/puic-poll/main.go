@@ -51,6 +51,8 @@ type Stats struct {
 	Elapsed float64
 	StatusCode int
 	Now int64
+	URL string
+	Message string
 }
 
 // Create a HTTP Client using an H2Quic QuicRoundTripper that determines
@@ -138,6 +140,7 @@ func wait(waitFrom int, waitTo int) {
 	time.Sleep(time.Duration(wait) * time.Millisecond)
 }
 
+// load CA certs and set InsecureSkipVerify to false. 
 func loadCerts(certs string, hclient *http.Client) error {
 	rt := hclient.Transport.(*h2quic.QuicRoundTripper)
 	rt.TLSClientConfig.InsecureSkipVerify = false
