@@ -22,8 +22,6 @@ Usage of ./wwwsrv:
   -v	verbose
 ```
 
-certpath must point to a directory containing the two files `fullchain.pem` and `privkey.pem`. You can use
-the pems that reside directly in the example directory. 
 
 Example Usage:
 
