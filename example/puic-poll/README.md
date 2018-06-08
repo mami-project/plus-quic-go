@@ -27,3 +27,8 @@ Usage of ./puic-poll:
 
 Output files have the name `puic-poll-<UNIXNANO>.json`. If logfile is an empty string stdout is used instead.
 
+Example Usage:
+
+```
+./puic-poll -certs=rootCACert.pem -collect=10 -iface=lo -logfile="" -odir="./tmp/" -urls=https://localhost:6121/data/256 -wait-from=500 -wait-to=1000
+```

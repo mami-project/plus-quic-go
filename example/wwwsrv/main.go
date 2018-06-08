@@ -43,7 +43,8 @@ func initHttp(prefix string) {
 func main() {
 	verbose := flag.Bool("v", false, "verbose")
 	laddr := flag.String("laddr", "localhost:6121", "Local address to listen on.")
-	certPath := flag.String("certpath", "./", "certificate directory. Must contain two files fullchain.pem and privkey.pem.")
+	certFilePath := flag.String("cert", "cert.pem", "Path to certificate file (PEM)")
+	keyFilePath := flag.String("key", "key.pem", "Path to key file (PEM) (unencrypted)")
 	prefix := flag.String("prefix","/data/","Path prefix where the API methods should be available under (should start and end with a slash)")
 	flag.Parse()
 
@@ -55,8 +56,8 @@ func main() {
 		utils.SetLogLevel(utils.LogLevelInfo)
 	}
 
-	certFile := *certPath + "/fullchain.pem"
-	keyFile := *certPath + "/privkey.pem"
+	certFile := *certFilePath
+	keyFile := *keyFilePath
 
 	err := h2quic.ListenAndServeQUIC(*laddr, certFile, keyFile, nil)
 

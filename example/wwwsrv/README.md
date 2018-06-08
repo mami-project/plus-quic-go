@@ -10,9 +10,23 @@ A simple H2QUIC server. It provides the methods:
 Usage:
 
 ```
-./wwwsrv -laddr=localhost:6121 -prefix=/data/ -certpath=./
+Usage of ./wwwsrv:
+  -cert string
+    	Path to certificate file (PEM) (default "cert.pem")
+  -key string
+    	Path to key file (PEM) (unencrypted) (default "key.pem")
+  -laddr string
+    	Local address to listen on. (default "localhost:6121")
+  -prefix string
+    	Path prefix where the API methods should be available under (should start and end with a slash) (default "/data/")
+  -v	verbose
 ```
 
 certpath must point to a directory containing the two files `fullchain.pem` and `privkey.pem`. You can use
 the pems that reside directly in the example directory. 
 
+Example Usage:
+
+```
+./wwwsrv -cert=rootCACert.pem -key=rootCAKey.pem -laddr=localhost:6121 -prefix=/data/
+```
