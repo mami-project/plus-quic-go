@@ -163,12 +163,13 @@ func loadCerts(certs string, hclient *http.Client) error {
 func main() {
 	var urls = flag.String("urls", "", "URLs to fetch (; delimited).")
 	var logfilePath = flag.String("logfile", "puic-poll.log", "File to write debug information to.")
-	var waitFrom = flag.Int("wait-from", 1000, "Minimum time to wait in milliseconds before making the next request.")
-	var waitTo = flag.Int("wait-to", 5000, "Maximum time to wait in milliseconds before making the next request.")
-	var collect = flag.Int("collect", 1024, "How many statistics items to collect in a single output file.")
+	var waitFrom = flag.Int("wait-from", 100, "Minimum time to wait in milliseconds before making the next request.")
+	var waitTo = flag.Int("wait-to", 200, "Maximum time to wait in milliseconds before making the next request.")
+	var collect = flag.Int("collect", 128, "How many statistics items to collect in a single output file.")
 	var odir = flag.String("odir", "./tmp/", "Output directory.")
 	var ifaceName = flag.String("iface", "op0", "Interface to use.")
 	var certs = flag.String("certs", "", "Path to certificates to be trusted as Root CAs.")
+	var runs = flag.Int("runs", 10, "How many runs (one run constists of `collect` requests)")
 
 	flag.Parse()
 
@@ -204,8 +205,12 @@ func main() {
 	}
 
 	urlsToFetch := strings.Split(*urls, ";")
+	
+	run := 0
 
 	for {
+
+		writeOrDie(logfile, "RUN [%d]", run)
 
 		urlToFetch := urlsToFetch[rand.Int() % len(urlsToFetch)]
 
@@ -250,7 +255,12 @@ func main() {
 			// Reset counter to zero, close the output file and open a new 
 			// output file
 			j = 0
+			run++
 			ofile.Close()
+
+			if run >= *runs {
+				break
+			}
 
 			ofile, err = openNextOutputFile(*odir)
 
