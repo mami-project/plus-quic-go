@@ -152,7 +152,7 @@ func (s *server) servePLUS() {
 		  s.plusConnManager.ReturnPacketAndBuffer(plusPacket)
 
         if feedbackData != nil {
-			utils.Infof("Have to send feedback data %x", feedbackData)
+			utils.Debugf("Have to send feedback data %x", feedbackData)
 		}
 
         if err := s.handlePacketPLUS(s.conn, remoteAddr, data, plusConnection, feedbackData); err != nil {

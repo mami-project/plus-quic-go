@@ -503,7 +503,7 @@ func (s *session) handleFrames(fs []frames.Frame) error {
 		case *frames.BlockedFrame:
 		case *frames.PingFrame:
 		case *frames.PLUSFeedbackFrame:
-			utils.Infof("Received a PLUSFeedbackFrame with feedback: %x", frame.Data)
+			utils.Debugf("Received a PLUSFeedbackFrame with feedback: %x", frame.Data)
 			if s.config.UsePLUS {
 				s.plusConnection.AddPCFFeedback(frame.Data)
 			}
@@ -833,7 +833,7 @@ func (s *session) WaitUntilHandshakeComplete() error {
 }
 
 func (s *session) queuePLUSFeedbackFrame(data []byte) {
-	utils.Infof("Queue PLUSFeedbackFrame: %d", data)
+	utils.Debugf("Queue PLUSFeedbackFrame: %d", data)
 	s.packer.QueueControlFrameForNextPacket(&frames.PLUSFeedbackFrame{
 		Data: data,
 	})

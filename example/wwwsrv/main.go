@@ -38,6 +38,12 @@ func initHttp(prefix string) {
 		rand.Read(data)
 		w.Write(data)
 	})
+
+	http.HandleFunc(prefix + "128MiB", func(w http.ResponseWriter, r *http.Request) {
+		data := make([]byte, 128 * 1024 * 1024)
+		rand.Read(data)
+		w.Write(data)
+	})
 }
 
 func main() {
