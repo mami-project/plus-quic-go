@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	//"bytes"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -30,7 +30,7 @@ func main() {
 	var dst io.Writer
 
 	if *path == "" {
-		dst = &bytes.Buffer{}
+		dst = os.Stdout
 	} else {
 		fi, err := os.Create(*path)
 		if err != nil {
