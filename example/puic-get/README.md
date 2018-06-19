@@ -12,7 +12,7 @@ Usage of ./puic-get:
     	URL to fetch.
 ```
 
-If no path is specified it'll download to limbo. 
+If no path is specified it'll download to stdout.
 
 
 Example Usage:
